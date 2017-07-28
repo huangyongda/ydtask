@@ -116,7 +116,7 @@ class Ydtask
     {
         self::$kill_sig=1;
         //$this->printInfo( "进程:".getmypid().",收到结束信号:".$signo."\n" );
-}
+    }
 
     /**
      * 设置任务数量
@@ -300,7 +300,10 @@ class Ydtask
                     $this->printInfo( "结束子进程".$id."\n");exit(0);
                 }
                 $redis = new \Redis();
-                $redis->connect($this->redis_host, $this->redis_port);
+                $connetct_redis=@$redis->connect($this->redis_host, $this->redis_port);
+                if(!$connetct_redis){
+                    throw new \RedisException("连接redis失败[".$this->redis_host.":".$this->redis_port."]");
+                }
                 $list = $redis->brPop($this->redis_task_list_name, 5);
                 if (count($list) <= 0) {
                     continue;
@@ -330,7 +333,7 @@ class Ydtask
             }
 
             $this->printInfo( "\033[1;33m[子进程:" . $id . ",".$this->convert(memory_get_usage(true))."," . date("Y-m-d H:i:s") . "]\e[0m ".
-                "出队" . isset($list[0])?$list[0]:"null" . ":" . isset($list[1])?$list[1]:"null" ." ".
+            "出队" . isset($list)&&isset($list[0])?$list[0]:"null" . ":" . isset($list)&&isset($list[1])?$list[1]:"null" ." ".
                 "返回" . var_export($info,true) . "\n");
             if(self::$kill_sig==1){
                 $this->printInfo( "结束子进程".$id."\n");exit(0);

@@ -332,8 +332,11 @@ class Ydtask
                 $info= "\e[0;31mException >>>>" . $e->getMessage() ."\e[0m";
             }
 
-            $this->printInfo( "\033[1;33m[子进程:" . $id . ",".$this->convert(memory_get_usage(true))."," . date("Y-m-d H:i:s") . "]\e[0m ".
-            "出队" . isset($list)&&isset($list[0])?$list[0]:"null" . ":" . isset($list)&&isset($list[1])?$list[1]:"null" ." ".
+            $this->printInfo( "\033[1;33m[子进程:" . $id . ",".
+            $this->convert(memory_get_usage(true)).
+            "," . date("Y-m-d H:i:s") . "]\e[0m ".
+            "出队" . (isset($list)&&isset($list[0])?$list[0]:"null") . ":" .
+                (isset($list)&&isset($list[1])?$list[1]:"null") ." ".
                 "返回" . var_export($info,true) . "\n");
             if(self::$kill_sig==1){
                 $this->printInfo( "结束子进程".$id."\n");exit(0);

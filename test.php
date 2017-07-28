@@ -13,7 +13,7 @@ class test{
         $info=var_export($date,true);
 
 
-        $info="测试";
+//        $info="测试";
         return $info;
     }
 }

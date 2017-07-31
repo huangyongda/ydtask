@@ -21,6 +21,7 @@ $obj=new Ydtask();
     ->setRedisPort("6379")//redis主机端口
     ->setPrintInfoPath("out.info")//输出
     ->setRedisTasklistName(array("tasklist"))//出队的list队列名称
+    ->setRedisTasklistName("tasklist")//出队的list队列名称
     ->setRestartCheckFilePath(dirname(__FILE__) )//服务自动重启 检测路径（自动检测最新修改时间 最新的php文件）
     ->setTaskNum(2) //任务子进程的数量
     ->run();

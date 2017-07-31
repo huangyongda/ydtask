@@ -31,6 +31,7 @@ class Ydtask
         $this->redis_task_list_name="tasklist";
         $this->isDaemonizeModel=0;
         $this->printInfoPath="";
+        $this->redis = new \Redis();
     }
 
     /**
@@ -294,17 +295,13 @@ class Ydtask
         $id = getmypid();
         $this->printInfo( "创建子进程：【" . $id . "】>>>\n");
         for (;;) {
+            $info="";
             $list=array();
             try {
                 if(self::$kill_sig==1){
                     $this->printInfo( "结束子进程".$id."\n");exit(0);
                 }
-                $redis = new \Redis();
-                $connetct_redis=@$redis->connect($this->redis_host, $this->redis_port);
-                if(!$connetct_redis){
-                    throw new \RedisException("连接redis失败[".$this->redis_host.":".$this->redis_port."]");
-                }
-                $list = $redis->brPop($this->redis_task_list_name, 5);
+                $list = $this->TaskPop();
                 if (count($list) <= 0) {
                     continue;
                 }
@@ -314,24 +311,20 @@ class Ydtask
                     throw new \Exception("任务调用失败返回值[".var_export($info,true)."]");
                 }
             } catch (\PDOException $e) {
-                if(count($list)>0 ){
-                    $redis->lPush($list[0]."_error", $list[1]);
-                }
                 $info= "\e[0;31mPDOException >>>>" . $e->getMessage()."\e[0m";
             } catch (\ErrorException $e) {
                 if(count($list)>0 ){
-                    $redis->lPush($list[0]."_error", $list[1]);
+                    $this->redis->lPush($list[0]."_error", $list[1]);
                 }
                 $info= "\e[0;31mErrorException >>>>" . $e->getMessage()."\e[0m";
             } catch (\RedisException $e) {
-                $info= "\e[0;31mRedisException >>>>" . $e->getMessage()."\e[0m";
+                $info= "\e[0;31mRedisException >>>>" . $e->getMessage().",line:".$e->getLine()."\e[0m";
             } catch (\Exception $e) {
                 if(count($list)>0 ){
-                    $redis->lPush($list[0]."_error", $list[1]);
+                    $this->redis->lPush($list[0]."_error", $list[1]);
                 }
                 $info= "\e[0;31mException >>>>" . $e->getMessage() ."\e[0m";
             }
-
             $this->printInfo( "\033[1;33m[子进程:" . $id . ",".
             $this->convert(memory_get_usage(true)).
             "," . date("Y-m-d H:i:s") . "]\e[0m ".
@@ -343,5 +336,32 @@ class Ydtask
             }
 
         }
+    }
+
+    /**
+     * 任务出队
+     */
+    public function TaskPop()
+    {
+        try {
+            $ping_str=$this->redis->ping();
+            if(!$ping_str){
+                throw new \RedisException("ping服务器redis失败".$this->redis_host.":".$this->redis_port,231301);
+            }
+        } catch (\RedisException $e) {
+            $this->redisConnect();
+        }
+        $list = $this->redis->brPop($this->redis_task_list_name, 5);//这个时间必须小于connect配置的时间
+
+        return $list;
+    }
+
+    private function redisConnect()
+    {
+        $connetct_redis=@$this->redis->connect($this->redis_host, $this->redis_port,10);//10秒超时
+        if(!$connetct_redis){
+            throw new \RedisException("连接redis失败[".$this->redis_host.":".$this->redis_port."]",231302);
+        }
+
     }
 }

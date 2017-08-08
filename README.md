@@ -5,8 +5,12 @@ ydtask任务管理 php cli
 ## Installation 安装
 
 ```
-composer require huangyongda/ydtask=dev-master
+composer require huangyongda/ydtask
 ```
 
 
 ###  use ydtask  用法,请查看demo.php
+
+## 运行效果如下
+
+![image](https://github.com/huangyongda/ydtask/blob/master/demo.gif)

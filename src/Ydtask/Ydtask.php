@@ -31,6 +31,10 @@ class Ydtask
         $this->redis_task_list_name="tasklist";
         $this->isDaemonizeModel=0;
         $this->printInfoPath="";
+        $this->runConfig=array();
+        $this->runing=array();
+        $this->pidRunLevel=array();
+        $this->pidPath="";
         $this->redis = new \Redis();
     }
 
@@ -73,6 +77,16 @@ class Ydtask
     public function setRedisTasklistName($str)
     {
         $this->redis_task_list_name=$str;
+        return $this;
+    }
+    /**
+     * redis 任务队列的名称
+     * @param $path
+     * @return $this
+     */
+    public function setRunConfig($runLevel=1,$runNum=1)
+    {
+        $this->runConfig[$runLevel]=$runNum;
         return $this;
     }
 
@@ -155,9 +169,55 @@ class Ydtask
         }
     }
 
+    /**
+     * 设置屏幕输出的内容到文件
+     * @param $path
+     * @return $this
+     */
+    public function setPidPath($path)
+    {
+        $this->pidPath=$path;
+        return $this;
+    }
+
+    private function writePid($pid)
+    {
+        $fh = fopen($this->pidPath, "a");
+        fwrite($fh, $pid);
+        fclose($fh);
+    }
+
+    private function check()
+    {
+        if(!trim($this->redis_task_list_name))
+        {
+            $this->printInfo( "请设置进程的队列名称..\n");
+            exit(0);
+        }
+        if(count($this->run_num)<=0)
+        {
+            $this->printInfo( "请设置进程的数量..\n");
+            exit(0);
+        }
+        if(!$this->pidPath)
+        {
+            $this->printInfo( "请设置pid的路径..\n");
+            exit(0);
+        }
+        if(file_exists($this->pidPath) )
+        {
+            $this->printInfo( "程序已经运行，请不要重复运行..\n");
+            exit(0);
+        }
+    }
+
 
     public function run()
     {
+        if(count($this->runConfig)>0){
+            $this->run_num=array_sum($this->runConfig);
+        }
+        $this->check();
         $this->myids=array();
 
 
@@ -166,6 +226,8 @@ class Ydtask
         {
             $this->daemonize();
         }
+
+        $this->writePid(getmypid());
 
         pcntl_signal(SIGINT, [__CLASS__, 'sighandler']);
 
@@ -179,12 +241,18 @@ class Ydtask
                 $res = pcntl_waitpid($pid, $status, WNOHANG);
                 if($res == -1 || $res > 0){
                     unset($this->myids[$key]);
+                    $runLevel=$this->pidRunLevel[$pid];
+                    unset($this->pidRunLevel[$pid]);
+                    if(isset($this->runing[$runLevel]) ){
+                        $this->runing[$runLevel]--;
+                    }
                 }
 
             }
             //echo "self::kill_sig".self::$kill_sig.">>".count($this->myids)."\n";
             if(self::$kill_sig==1 && count($this->myids)==0){
                 $this->printInfo( "主进程结束..\n");
+                unlink ($this->pidPath);//删除pid的文件
                 exit(0);
             }
             if(self::$kill_sig==0 && count($this->myids)==0){
@@ -259,6 +327,17 @@ class Ydtask
     private function run_task($num=2)
     {
         for ($i=1;$i<=$num;$i++){
+            $run_level="";
+            foreach ($this->runConfig as $level=>$run_num) {
+                if(!isset($this->runing[$level])){
+                    $this->runing[$level]=0;
+                }
+                if($this->runing[$level]<$run_num){
+                    $run_level=$level;//
+                    $this->runing[$level]++;
+                    break;//跳出
+                }
+            }
             $pid = pcntl_fork();    //创建子进程
             //父进程和子进程都会执行下面代码
             if ($pid == -1) {
@@ -266,6 +345,7 @@ class Ydtask
                 die('错误处理：创建子进程失败时返回-1.');
             } else if ($pid) {
                 $this->myids[] = $pid;
+                $this->pidRunLevel[$pid] = $run_level;//
                 //父进程会得到子进程号，所以这里是父进程执行的逻辑
                 //如果不需要阻塞进程，而又想得到子进程的退出状态，则可以注释掉pcntl_wait($status)语句，或写成：
 //                pcntl_wait($status,WNOHANG); //等待子进程中断，防止子进程成为僵尸进程。
@@ -274,7 +354,7 @@ class Ydtask
             } else {
                 //子进程得到的$pid为0, 所以这里是子进程执行的逻辑。
                 //sleep(1);
-                $this->child();
+                $this->child($run_level);
                 exit(0) ;
             }
         }
@@ -289,11 +369,11 @@ class Ydtask
     /**
      * 子进程
      */
-    private function child()
+    private function child($run_level="")
     {
 
         $id = getmypid();
-        $this->printInfo( "创建子进程：【" . $id . "】>>>\n");
+        $this->printInfo( "创建子进程：".($run_level?"level【".$run_level."】":"")."【" . $id . "】>>>\n");
         for (;;) {
             $info="";
             $list=array();

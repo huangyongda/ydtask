@@ -9,6 +9,9 @@ $total=100000000;
 $redis_host="127.0.0.1";
 $redis_port="6379";
 $RedisTasklistName="tasklist";
+if(isset($argv[1])){
+    $RedisTasklistName=$argv[1];
+}
 $info="";
     try {
         $redis = new \Redis();

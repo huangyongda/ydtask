@@ -35,7 +35,9 @@ class Ydtask
         $this->runing=array();
         $this->pidRunLevel=array();
         $this->pidPath="";
+        $this->runCommandStr="";//运行命令
         $this->redis = new \Redis();
+        $this->myids=array();//子进程id列表
     }
 
     /**
@@ -77,6 +79,16 @@ class Ydtask
     public function setRedisTasklistName($str)
     {
         $this->redis_task_list_name=$str;
+        return $this;
+    }
+    /**
+     * 运行命令
+     * @param $path
+     * @return $this
+     */
+    public function setCommand($str)
+    {
+        $this->runCommandStr=$str;
         return $this;
     }
     /**
@@ -130,7 +142,7 @@ class Ydtask
     private static function sighandler($signo)
     {
         self::$kill_sig=1;
-        //$this->printInfo( "进程:".getmypid().",收到结束信号:".$signo."\n" );
+//        $this->printInfo( "进程:".getmypid().",收到结束信号:".$signo."\n" );
     }
 
     /**
@@ -211,13 +223,63 @@ class Ydtask
         }
     }
 
+    private function stop()
+    {
+        $cur_run_pid = "";
+        if(file_exists($this->pidPath)){
+            $cur_run_pid = file_get_contents($this->pidPath);//将整个文件内容读入到一个字符串中
+        }
+        if(!$cur_run_pid)
+        {
+            $this->printInfo( "找不到pid程序停止失败..\n");
+            exit(0);
+        }
+        $shell_str="ps -ef|awk '{print $1\" \"$2\" \"$3\" \"$4}'|grep \"\ ".$cur_run_pid."\ \" |awk '{print $2}'";
+        exec($shell_str,$out);
+//                print_r($out);
+        //echo var_export($out,true);
+        //$out=explode("\n",$out);
+        //print_r($out);
+        $this->printInfo( "[".date("Y-m-d H:i:s")."]停止程序中".$cur_run_pid."...\n");
+        foreach ($out as $pid) {
+            $kill_info=posix_kill($pid, 2);
+            $this->printInfo( "[".date("Y-m-d H:i:s")."]结束子进程 pid:【".$pid."结果". var_export($kill_info,true)."】\n");
+        }
+        for (;;){
+            if(exec($shell_str."|wc -l") >0  ){
+                sleep(1);
+            }
+            else{
+                $this->printInfo( "[".date("Y-m-d H:i:s")."]程序".$cur_run_pid."停止成功...\n");exit(0);
+            }
+        }
+    }
+
+    private function runCommand()
+    {
+        switch ($this->runCommandStr) {
+            case "stop":
+                $this->stop();
+                exit(0);
+                break;
+            case "":
+                break;
+            case "":
+                break;
+            default :
+                break;
+        }
+    }
+
 
     public function run()
     {
         if(count($this->runConfig)>0){
             $this->run_num=array_sum($this->runConfig);
         }
+        $this->runCommand();
         $this->check();
+
         $this->myids=array();
 
 
@@ -373,15 +435,15 @@ class Ydtask
     {
 
         $id = getmypid();
-        $this->printInfo( "创建子进程：".($run_level?"level【".$run_level."】":"")."【" . $id . "】>>>\n");
+        $this->printInfo( "创建子进程：".($run_level?"level[".$run_level."]":"")."[" . $id . "]>>>\n");
         for (;;) {
             $info="";
             $list=array();
             try {
                 if(self::$kill_sig==1){
-                    $this->printInfo( "结束子进程".$id."\n");exit(0);
+                    $this->printInfo( "结束子进程".($run_level?"level[".$run_level."]":"")."[".$id."]\n");exit(0);
                 }
-                $list = $this->TaskPop();
+                $list = $this->TaskPop($run_level);
                 if (count($list) <= 0) {
                     continue;
                 }
@@ -405,7 +467,7 @@ class Ydtask
                 }
                 $info= "\e[0;31mException >>>>" . $e->getMessage() ."\e[0m";
             }
-            $this->printInfo( "\033[1;33m[子进程:" . $id . ",".
+            $this->printInfo( "\033[1;33m[子进程:" . $id . ",".($run_level?"level:".$run_level.",":"")."".
             $this->convert(memory_get_usage(true)).
             "," . date("Y-m-d H:i:s") . "]\e[0m ".
             "出队" . (isset($list)&&isset($list[0])?$list[0]:"null") . ":" .
@@ -421,7 +483,7 @@ class Ydtask
     /**
      * 任务出队
      */
-    public function TaskPop()
+    public function TaskPop($run_level="")
     {
         try {
             $ping_str=$this->redis->ping();
@@ -431,7 +493,17 @@ class Ydtask
         } catch (\RedisException $e) {
             $this->redisConnect();
         }
-        $list = $this->redis->brPop($this->redis_task_list_name, 5);//这个时间必须小于connect配置的时间
+        $redis_task_list_name=$this->redis_task_list_name;
+        if(is_string($redis_task_list_name))
+        {
+            $redis_task_list_name.=$run_level;
+        }
+        if(is_array($redis_task_list_name)){
+            foreach ($redis_task_list_name as $key=>$item) {
+                $redis_task_list_name[$key].=$run_level;
+            }
+        }
+        $list = $this->redis->brPop($redis_task_list_name, 5);//这个时间必须小于connect配置的时间
 
         return $list;
     }

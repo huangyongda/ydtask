@@ -22,6 +22,7 @@ class Ydtask
 
     public function __construct()
     {
+        ini_set('date.timezone','Asia/Shanghai');
         self::$kill_sig=0;
         $this->restartCheckFilePath="";
         $this->fn=function(){};
@@ -439,6 +440,8 @@ class Ydtask
         for (;;) {
             $info="";
             $list=array();
+            $task_doing_key="";
+            $redis_task_name_doing_key="";
             try {
                 if(self::$kill_sig==1){
                     $this->printInfo( "结束子进程".($run_level?"level[".$run_level."]":"")."[".$id."]\n");exit(0);
@@ -447,24 +450,27 @@ class Ydtask
                 if (count($list) <= 0) {
                     continue;
                 }
+                //进行中的任务
+                $task_doing_key=md5(rand(1000,9999).$list[1]);
+                $redis_task_name_doing_key=$this->redis_task_list_name."_doing";
+                $this->redis->hSetNx($redis_task_name_doing_key,$task_doing_key,$list[1]);
+
                 $fn=$this->fn;
                 $info = $fn($list);
                 if(!$info){
                     throw new \Exception("任务调用失败返回值[".var_export($info,true)."]");
                 }
+                $this->redis->hDel($redis_task_name_doing_key,$task_doing_key);
+
             } catch (\PDOException $e) {
                 $info= "\e[0;31mPDOException >>>>" . $e->getMessage()."\e[0m";
             } catch (\ErrorException $e) {
-                if(count($list)>0 ){
-                    $this->redis->lPush($list[0]."_error", $list[1]);
-                }
+                $this->exec_error($list,$redis_task_name_doing_key,$task_doing_key);
                 $info= "\e[0;31mErrorException >>>>" . $e->getMessage()."\e[0m";
             } catch (\RedisException $e) {
                 $info= "\e[0;31mRedisException >>>>" . $e->getMessage().",line:".$e->getLine()."\e[0m";
             } catch (\Exception $e) {
-                if(count($list)>0 ){
-                    $this->redis->lPush($list[0]."_error", $list[1]);
-                }
+                $this->exec_error($list,$redis_task_name_doing_key,$task_doing_key);
                 $info= "\e[0;31mException >>>>" . $e->getMessage() ."\e[0m";
             }
             $this->printInfo( "\033[1;33m[子进程:" . $id . ",".($run_level?"level:".$run_level.",":"")."".
@@ -477,6 +483,16 @@ class Ydtask
                 $this->printInfo( "结束子进程".$id."\n");exit(0);
             }
 
+        }
+    }
+
+    private function exec_error($list,$redis_task_name_doing_key,$task_doing_key)
+    {
+        if(count($list)>0 ){
+            $this->redis->lPush($list[0]."_error", $list[1]);
+        }
+        if($redis_task_name_doing_key && $task_doing_key){
+            $this->redis->hDel($redis_task_name_doing_key,$task_doing_key);
         }
     }
 

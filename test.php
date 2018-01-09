@@ -11,7 +11,7 @@ class test{
     public function test1($date)
     {
         $info=var_export($date,true);
-
+        sleep(1);
 
 //        $info="测试";
         return $info;

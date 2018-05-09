@@ -298,6 +298,7 @@ class Ydtask
 
         clearstatcache();//清除文件状态缓存。
         $last_update_time=$this->getFileNewTime($this->restartCheckFilePath);
+        $restart=false;
         $this->run_task($this->run_num);
         for (;;){
             foreach ($this->myids as $key=>$pid) {
@@ -320,13 +321,14 @@ class Ydtask
             }
             if(self::$kill_sig==0 && count($this->myids)==0){
                 $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程重启..\n");
+                $restart=false;
                 $this->run_task($this->run_num);
             }
             clearstatcache();//清除文件状态缓存。
-            if(
-            ($this->restartCheckFilePath && $this->getFileNewTime($this->restartCheckFilePath)>$last_update_time )
-            ||
-            self::$kill_sig==1
+            if($this->restartCheckFilePath && $this->getFileNewTime($this->restartCheckFilePath)>$last_update_time){
+                $restart=true;
+            }
+            if($restart || self::$kill_sig==1
             ){
                 $last_update_time=$this->getFileNewTime($this->restartCheckFilePath);
                 $this->printInfo( "[".date("Y-m-d H:i:s")."]主进程正在关闭子进程...."."\n");
@@ -335,14 +337,14 @@ class Ydtask
                     $res = pcntl_waitpid($pid, $status, WNOHANG);
                     if($res==0){
                         $kill_info=posix_kill($pid, 2);
-                        $this->printInfo(  "[".date("Y-m-d H:i:s")."]结束子进程 pid:【".$pid."结果". var_export($kill_info,true)."】\n");
+                        $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程结束子进程 pid:【".$pid."结果". var_export($kill_info,true)."】\n");
                     }
                 }
             }
-            if(count($this->myids) <$this->run_num && self::$kill_sig==0){
+            if(count($this->myids) <$this->run_num && self::$kill_sig==0 && $restart==false){
                 $this->run_task($this->run_num-count($this->myids) );
             }
-            $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程结束信号为".intval(self::$kill_sig)."..\n");
+//            $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程结束信号为".intval(self::$kill_sig)."..\n");
             sleep(2);
         }
 

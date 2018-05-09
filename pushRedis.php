@@ -6,7 +6,7 @@
  * Time: 上午2:41
  */
 $total=100000000;
-$redis_host="127.0.0.1";
+$redis_host="192.168.10.250";
 $redis_port="6379";
 $RedisTasklistName="tasklist2";
 if(isset($argv[1])){

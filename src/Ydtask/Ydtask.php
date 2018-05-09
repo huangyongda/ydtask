@@ -27,7 +27,7 @@ class Ydtask
         $this->restartCheckFilePath="";
         $this->fn=function(){};
         $this->run_num=2;
-        $this->redis_host="192.168.233.129";
+        $this->redis_host="127.0.0.1";
         $this->redis_port="6379";
         $this->redis_task_list_name="tasklist";
         $this->isDaemonizeModel=0;
@@ -140,7 +140,7 @@ class Ydtask
      * 信号处理
      * @param $signo
      */
-    private static function sighandler($signo)
+    public static function sighandler($signo)
     {
         self::$kill_sig=1;
 //        $this->printInfo( "进程:".getmypid().",收到结束信号:".$signo."\n" );
@@ -314,31 +314,35 @@ class Ydtask
             }
             //echo "self::kill_sig".self::$kill_sig.">>".count($this->myids)."\n";
             if(self::$kill_sig==1 && count($this->myids)==0){
-                $this->printInfo( "主进程结束..\n");
+                $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程结束..\n");
                 unlink ($this->pidPath);//删除pid的文件
                 exit(0);
             }
             if(self::$kill_sig==0 && count($this->myids)==0){
-                $this->printInfo( "主进程重启..\n");
+                $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程重启..\n");
                 $this->run_task($this->run_num);
             }
             clearstatcache();//清除文件状态缓存。
-            if($this->restartCheckFilePath && $this->getFileNewTime($this->restartCheckFilePath)>$last_update_time ){
+            if(
+            ($this->restartCheckFilePath && $this->getFileNewTime($this->restartCheckFilePath)>$last_update_time )
+            ||
+            self::$kill_sig==1
+            ){
                 $last_update_time=$this->getFileNewTime($this->restartCheckFilePath);
-                $this->printInfo( "[".date("Y-m-d H:i:s")."]重启...."."\n");
+                $this->printInfo( "[".date("Y-m-d H:i:s")."]主进程正在关闭子进程...."."\n");
 
                 foreach ($this->myids as $key=>$pid) {
                     $res = pcntl_waitpid($pid, $status, WNOHANG);
                     if($res==0){
-//                        $kill_info=posix_kill($pid, SIGTERM);
                         $kill_info=posix_kill($pid, 2);
-                        $this->printInfo( "结束子进程 pid:【".$pid."结果". var_export($kill_info,true)."】\n");
+                        $this->printInfo(  "[".date("Y-m-d H:i:s")."]结束子进程 pid:【".$pid."结果". var_export($kill_info,true)."】\n");
                     }
                 }
             }
-            if(count($this->myids) <$this->run_num){
+            if(count($this->myids) <$this->run_num && self::$kill_sig==0){
                 $this->run_task($this->run_num-count($this->myids) );
             }
+            $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程结束信号为".intval(self::$kill_sig)."..\n");
             sleep(2);
         }
 
@@ -436,7 +440,7 @@ class Ydtask
     {
 
         $id = getmypid();
-        $this->printInfo( "创建子进程：".($run_level?"level[".$run_level."]":"")."[" . $id . "]>>>\n");
+        $this->printInfo( "[".date("Y-m-d H:i:s")."]创建子进程：".($run_level?"level[".$run_level."]":"")."[" . $id . "]>>>\n");
         for (;;) {
             $info="";
             $list=array();
@@ -444,7 +448,7 @@ class Ydtask
             $redis_task_name_doing_key="";
             try {
                 if(self::$kill_sig==1){
-                    $this->printInfo( "结束子进程".($run_level?"level[".$run_level."]":"")."[".$id."]\n");exit(0);
+                    $this->printInfo( "[".date("Y-m-d H:i:s")."]结束子进程".($run_level?"level[".$run_level."]":"")."[".$id."]\n");exit(0);
                 }
                 $list = $this->TaskPop($run_level);
                 if (count($list) <= 0) {

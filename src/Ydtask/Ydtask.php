@@ -297,7 +297,9 @@ class Ydtask
         pcntl_signal(SIGCHLD, SIG_IGN); //如果父进程不关心子进程什么时候结束,子进程结束后，内核会回收。
 
         clearstatcache();//清除文件状态缓存。
-        $last_update_time=$this->getFileNewTime($this->restartCheckFilePath);
+        if($this->restartCheckFilePath){
+            $last_update_time=$this->getFileNewTime($this->restartCheckFilePath);
+        }
         $restart=false;
         $this->run_task($this->run_num);
         for (;;){
@@ -482,11 +484,11 @@ class Ydtask
             $this->printInfo( "\033[1;33m[子进程:" . $id . ",".($run_level?"level:".$run_level.",":"")."".
             $this->convert(memory_get_usage(true)).
             "," . date("Y-m-d H:i:s") . "]\e[0m ".
-            "出队" . (isset($list)&&isset($list[0])?$list[0]:"null") . ":" .
-                (isset($list)&&isset($list[1])?$list[1]:"null") ." ".
+//            "出队" . (isset($list)&&isset($list[0])?$list[0]:"null") . ":" .
+//                (isset($list)&&isset($list[1])?$list[1]:"null") ." ".
                 "返回" . var_export($info,true) . "\n");
             if(self::$kill_sig==1){
-                $this->printInfo( "结束子进程".$id."\n");exit(0);
+                $this->printInfo( "[".date("Y-m-d H:i:s")."]结束子进程".$id."\n");exit(0);
             }
 
         }

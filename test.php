@@ -13,7 +13,8 @@ class test{
         $info=var_export($date,true);
 //        sleep(1);
 
-//        $info="测试";
+        sleep(rand(1,11));
+        $info="测试";
         return $info;
     }
 }

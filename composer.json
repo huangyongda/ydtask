@@ -12,8 +12,7 @@
     },
     "autoload": {
       "psr-4": {
-        "Ydtask\\": "src/Ydtask",
-        "Ford\\Fiesta\\": "src/Fiesta"
+        "Ydtask\\": "src/Ydtask"
       }
     }
 }

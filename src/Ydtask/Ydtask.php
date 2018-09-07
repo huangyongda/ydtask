@@ -450,6 +450,8 @@ class Ydtask
             $list=array();
             $task_doing_key="";
             $redis_task_name_doing_key="";
+            list($msec, $sec) = explode(' ', microtime());
+            $begin_time=round($msec,3) + $sec;
             try {
                 if(self::$kill_sig==1){
                     $this->printInfo( "[".date("Y-m-d H:i:s")."]结束子进程".($run_level?"level[".$run_level."]":"")."[".$id."]\n");exit(0);
@@ -481,12 +483,25 @@ class Ydtask
                 $this->exec_error($list,$redis_task_name_doing_key,$task_doing_key);
                 $info= "\e[0;31mException >>>>" . $e->getMessage() ."\e[0m";
             }
-            $this->printInfo( "\033[1;33m[子进程:" . $id . ",".($run_level?"level:".$run_level.",":"")."".
+
+            list($msec, $sec) = explode(' ', microtime());
+            $end_time=round($msec,3) + $sec;
+
+
+            $runTime=round($end_time-$begin_time,3);
+
+            $color="\e[1;32m";//绿色
+            if($runTime>5){
+                $color="\e[1;33m";//黄色
+            }
+            if($runTime>10){
+                $color="\e[1;31m";//红色
+            }
+
+            $this->printInfo( $color."[子进程:" . $id . ",".($run_level?"level:".$run_level.",":"")."".
             $this->convert(memory_get_usage(true)).
-            "," . date("Y-m-d H:i:s") . "]\e[0m ".
-//            "出队" . (isset($list)&&isset($list[0])?$list[0]:"null") . ":" .
-//                (isset($list)&&isset($list[1])?$list[1]:"null") ." ".
-                "返回" . var_export($info,true) . "\n");
+            ", ".$runTime." 秒," . date("Y-m-d H:i:s") . "]\e[0m ".
+                var_export($info,true) . "\n");
             if(self::$kill_sig==1){
                 $this->printInfo( "[".date("Y-m-d H:i:s")."]结束子进程".$id."\n");exit(0);
             }

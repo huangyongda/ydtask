@@ -450,8 +450,7 @@ class Ydtask
             $list=array();
             $task_doing_key="";
             $redis_task_name_doing_key="";
-            list($msec, $sec) = explode(' ', microtime());
-            $begin_time=round($msec,3) + $sec;
+
             try {
                 if(self::$kill_sig==1){
                     $this->printInfo( "[".date("Y-m-d H:i:s")."]结束子进程".($run_level?"level[".$run_level."]":"")."[".$id."]\n");exit(0);
@@ -460,6 +459,8 @@ class Ydtask
                 if (count($list) <= 0) {
                     continue;
                 }
+                list($msec, $sec) = explode(' ', microtime());
+                $begin_time=round($msec,3) + $sec;
                 //进行中的任务
                 $task_doing_key=md5(rand(1000,9999).$list[1]);
                 $redis_task_name_doing_key=$this->redis_task_list_name."_doing";

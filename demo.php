@@ -28,7 +28,18 @@ $obj=new Ydtask();
 //    ->setRedisHost("127.0.0.1")//redis主机
     ->setRedisPort("6379")//redis主机端口
     ->setCommand($command)//输出
-    ->setPrintInfoPath("out.info")//输出
+    ->setFormatStatusInfo(function ($data){ //可以自己自定义任务状态显示内容
+        foreach ($data as $key=>$list) {
+            foreach ($list as $name=>$item) {
+                $data[$key][$name]="|".$data[$key][$name];
+            }
+        }
+        return $data;
+    })//输出
+    ->setPrintInfoPath(function ($data){
+//      $data;//系统一些其他参数 可以根据参数返回不同的日志路径
+        return array("out.info","out2.info");
+    })//输出
     ->setRedisTasklistName(array("tasklist"))//出队的list队列名称
     ->setRedisTasklistName("tasklist")//出队的list队列名称
     ->setPidPath("ydtask.pid")//出队的list队列名称

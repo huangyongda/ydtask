@@ -11,10 +11,6 @@ class test{
     public function test1($date)
     {
         $info=var_export($date,true);
-//        sleep(1);
-
-        sleep(rand(1,11));
-        $info="测试";
-        return $info;
+        return $info[1];
     }
 }

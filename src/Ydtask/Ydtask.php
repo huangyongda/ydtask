@@ -20,6 +20,16 @@ class Ydtask
     private $isDaemonizeModel;
     private $printInfoPath;
 
+    private $master_process_id=0;//主进程id
+    private $child_begin_time=0;//子进程开始时间
+    private $cur_task_begin_time=0;//当前任务开始时间
+    private $cur_run_level=0;//当前任务运行等级
+    private $cur_status=0;//当前任务运行状态
+    private $cur_task_run_times=0;//当前进程执行任务次数
+    private $cur_task_success_run_times=0;//当前进程执行任务成功次数
+    private $task_content=0;//当前任务执行内容
+    private $formatStatusInfo=0;//当前任务执行内容
+
     public function __construct()
     {
         ini_set('date.timezone','Asia/Shanghai');
@@ -31,7 +41,7 @@ class Ydtask
         $this->redis_port="6379";
         $this->redis_task_list_name="tasklist";
         $this->isDaemonizeModel=0;
-        $this->printInfoPath="";
+        $this->printInfoPath=array();
         $this->runConfig=array();
         $this->runing=array();
         $this->pidRunLevel=array();
@@ -39,7 +49,18 @@ class Ydtask
         $this->runCommandStr="";//运行命令
         $this->redis = new \Redis();
         $this->myids=array();//子进程id列表
+        $this->myids_run_time=array();//子进程id列表对应的开始运行时间
     }
+
+    /**
+     * @param int $formatStatusInfo
+     */
+    public function setFormatStatusInfo($formatStatusInfo)
+    {
+        $this->formatStatusInfo = $formatStatusInfo;
+        return $this;
+    }
+
 
     /**
      * 设置自动重启的检测目录
@@ -92,6 +113,7 @@ class Ydtask
         $this->runCommandStr=$str;
         return $this;
     }
+
     /**
      * redis 任务队列的名称
      * @param $path
@@ -143,7 +165,7 @@ class Ydtask
     public static function sighandler($signo)
     {
         self::$kill_sig=1;
-//        $this->printInfo( "进程:".getmypid().",收到结束信号:".$signo."\n" );
+//        echo ( "进程:".getmypid().",收到结束信号:".$signo."\n" );
     }
 
     /**
@@ -172,9 +194,34 @@ class Ydtask
     {
         if($this->printInfoPath)
         {
-            $fh = fopen($this->printInfoPath, "a");
-            fwrite($fh, $info);
-            fclose($fh);
+            if($this->printInfoPath instanceof \Closure){
+                $func=$this->printInfoPath;
+
+                $data=array(
+                    "master_process_id"=>$this->master_process_id,
+                    "child_begin_time"=>$this->child_begin_time,
+                    "cur_task_begin_time"=>$this->cur_task_begin_time,
+                    "cur_run_level"=>$this->cur_run_level,
+                    "cur_status"=>$this->cur_status,
+                    "cur_task_run_times"=>$this->cur_task_run_times,
+                    "cur_task_success_run_times"=>$this->cur_task_success_run_times,
+                    "task_content"=>$this->task_content,
+                );
+                $printInfoPath=$func($data);
+                foreach ($printInfoPath as $Path) {
+                    $fh = fopen($Path, "a");
+                    fwrite($fh, $info);
+                    fclose($fh);
+                }
+            }
+            if(is_array($this->printInfoPath)){
+                foreach ($this->printInfoPath as $Path) {
+                    $fh = fopen($Path, "a");
+                    fwrite($fh, $info);
+                    fclose($fh);
+                }
+            }
+
         }
         if(!$this->isDaemonizeModel )
         {
@@ -195,9 +242,23 @@ class Ydtask
 
     private function writePid($pid)
     {
-        $fh = fopen($this->pidPath, "a");
+        $fh = fopen($this->pidPath, "w");
         fwrite($fh, $pid);
         fclose($fh);
+    }
+
+    /**
+     * 获取主进程id
+     */
+    private function getMasterProcessId()
+    {
+        if(!file_exists($this->pidPath)){
+            throw new \Exception("主进程id不存在");
+        }
+        $myfile = fopen($this->pidPath, "r") or die("不能读取pid文件");
+        $pid= trim(fread($myfile,filesize($this->pidPath)));
+        fclose($myfile);
+        return $pid;
     }
 
     private function check()
@@ -219,9 +280,16 @@ class Ydtask
         }
         if(file_exists($this->pidPath) )
         {
-            $this->printInfo( "程序已经运行，请不要重复运行..\n");
-            exit(0);
+            $pid=$this->getMasterProcessId();
+            $shell_str="ps -ef|awk '{print $2}' |"."grep ".$pid." " ;
+            exec($shell_str,$out);
+            if($out){
+                $this->printInfo( "程序已经运行，请不要重复运行..\n");
+                exit(0);
+            }
+
         }
+
     }
 
     private function stop()
@@ -256,11 +324,116 @@ class Ydtask
         }
     }
 
+    private function time_to_date($time=0)
+    {
+        $str="";
+        if($time>=86400){
+            $str.=intval($time/86400)."天";
+            $time=$time-(intval($time/86400)*86400);
+        }
+        if($time>=3600){
+            $str.=intval($time/3600)."小时";
+            $time=$time-(intval($time/3600)*3600);
+        }
+        if($time>=60){
+            $str.=intval($time/60)."分钟";
+            $time=$time-(intval($time/60)*60);
+        }
+        $str.=$time."秒";
+
+        return $str;
+    }
+    private function status()
+    {
+        $head=array(
+            "主进程",
+            "子进程",
+            "内存",
+            "子进程启动时间",
+            "当前运行状态",
+            "进程已运行时间",
+            "当前任务等级",
+            "当前任务已运行时间",
+            "总执行次数",
+            "执行成功次数",
+            "执行失败次数",
+            "正在运行",
+        );
+
+        $print_info=array();
+        $print_info[]=$head;
+
+
+        try {
+            $ping_str=$this->redis->ping();
+            if(!$ping_str){
+                throw new \RedisException("ping服务器redis失败".$this->redis_host.":".$this->redis_port,231301);
+            }
+        } catch (\RedisException $e) {
+            $this->redisConnect();
+        }
+        try{
+            $masterId=$this->getMasterProcessId();
+        } catch (\Exception $e) {
+            echo $e->getMessage();
+            exit();
+        }
+
+
+
+        $info=$this->redis->hGetAll($this->redis_task_list_name."_chind_info".$masterId);
+
+        $shell_str="ps -ef|awk '{print $3 \" \" $2}'|grep \"^".$masterId."\" |awk '{print   $2}'";
+        exec($shell_str,$out);
+        foreach ($info as $key=> $item) {
+            $process_info=unserialize($item);
+            if(
+                isset($process_info["master_process_id"])
+                && $process_info["master_process_id"]!=$masterId
+            ){
+                $this->redis->hDel($this->redis_task_list_name."_chind_info",$key);
+                continue;
+            }
+            if($process_info['pid'] && !in_array($process_info['pid'],$out)){
+                $this->redis->hDel($this->redis_task_list_name."_chind_info",$key);
+                continue;
+            }
+            $list=array(
+                $process_info['master_process_id'],
+                $process_info['pid'],
+                str_replace(" ","", $process_info['cur_menory']),
+                date("Y-m-d/H:i:s",$process_info['child_begin_time']),
+                $process_info['cur_status']==1?"运行中":"空闲",
+                $this->time_to_date((time()-intval($process_info['child_begin_time']) ) ),
+                $process_info['cur_run_level'],
+                $process_info['cur_status']?$this->time_to_date((time()-intval($process_info['cur_task_begin_time']) ) ):"无",
+                $process_info['cur_task_run_times'],
+                $process_info['cur_task_success_run_times'],
+                $process_info['cur_task_run_times']-$process_info['cur_task_success_run_times'],
+                $process_info['task_content'],
+            );
+            $print_info[]=$list;
+        }
+        if($this->formatStatusInfo instanceof \Closure){
+            $formatStatusInfo=$this->formatStatusInfo;
+            $print_info=$formatStatusInfo($print_info);
+        }
+        foreach ($print_info as $item) {
+            echo implode(" ",$item)."\n";
+        }
+
+        exit(0);
+    }
+
     private function runCommand()
     {
         switch ($this->runCommandStr) {
             case "stop":
                 $this->stop();
+                exit(0);
+                break;
+            case "status":
+                $this->status();
                 exit(0);
                 break;
             case "":
@@ -303,23 +476,32 @@ class Ydtask
         $restart=false;
         $this->run_task($this->run_num);
         for (;;){
+            $cur_fiele_time=0;
+            if($this->restartCheckFilePath){
+                $cur_fiele_time=$this->getFileNewTime($this->restartCheckFilePath);
+            }
             foreach ($this->myids as $key=>$pid) {
                 $res = pcntl_waitpid($pid, $status, WNOHANG);
                 if($res == -1 || $res > 0){
                     unset($this->myids[$key]);
                     $runLevel=$this->pidRunLevel[$pid];
                     unset($this->pidRunLevel[$pid]);
+                    if(isset($this->myids_run_time[$pid]) ){
+                        unset($this->myids_run_time[$pid]);
+                    }
                     if(isset($this->runing[$runLevel]) ){
                         $this->runing[$runLevel]--;
                     }
                 }
-
             }
             //echo "self::kill_sig".self::$kill_sig.">>".count($this->myids)."\n";
             if(self::$kill_sig==1 && count($this->myids)==0){
                 $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程结束..\n");
+                $this->redisConnect();
+                $this->redis->hDel($this->redis_task_list_name."_chind_info".$this->getMasterProcessId());
                 unlink ($this->pidPath);//删除pid的文件
                 exit(0);
+
             }
             if(self::$kill_sig==0 && count($this->myids)==0){
                 $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程重启..\n");
@@ -327,15 +509,18 @@ class Ydtask
                 $this->run_task($this->run_num);
             }
             clearstatcache();//清除文件状态缓存。
-            if($this->restartCheckFilePath && $this->getFileNewTime($this->restartCheckFilePath)>$last_update_time){
-                $restart=true;
+
+            foreach ($this->myids_run_time as $start_rumtime) {
+                if($start_rumtime<$cur_fiele_time){
+                    $restart=true;
+                }
             }
             if($restart || self::$kill_sig==1
             ){
-                $last_update_time=$this->getFileNewTime($this->restartCheckFilePath);
-                $this->printInfo( "[".date("Y-m-d H:i:s")."]主进程正在关闭子进程...."."\n");
-
                 foreach ($this->myids as $key=>$pid) {
+                    if($this->myids_run_time[$pid] > $cur_fiele_time){
+                        continue;
+                    }
                     $res = pcntl_waitpid($pid, $status, WNOHANG);
                     if($res==0){
                         $kill_info=posix_kill($pid, 2);
@@ -343,7 +528,7 @@ class Ydtask
                     }
                 }
             }
-            if(count($this->myids) <$this->run_num && self::$kill_sig==0 && $restart==false){
+            if(count($this->myids) <$this->run_num && self::$kill_sig==0 ){
                 $this->run_task($this->run_num-count($this->myids) );
             }
 //            $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程结束信号为".intval(self::$kill_sig)."..\n");
@@ -417,6 +602,7 @@ class Ydtask
             } else if ($pid) {
                 $this->myids[] = $pid;
                 $this->pidRunLevel[$pid] = $run_level;//
+                $this->myids_run_time[$pid] = time();//
                 //父进程会得到子进程号，所以这里是父进程执行的逻辑
                 //如果不需要阻塞进程，而又想得到子进程的退出状态，则可以注释掉pcntl_wait($status)语句，或写成：
 //                pcntl_wait($status,WNOHANG); //等待子进程中断，防止子进程成为僵尸进程。
@@ -437,30 +623,70 @@ class Ydtask
         return $this;
     }
 
+    private function saveChindInfo()
+    {
+        try {
+            $ping_str=$this->redis->ping();
+            if(!$ping_str){
+                throw new \RedisException("ping服务器redis失败".$this->redis_host.":".$this->redis_port,231301);
+            }
+        } catch (\RedisException $e) {
+            $this->redisConnect();
+        }
+        $pid=getmypid();
+
+        $data=array(
+            "master_process_id"=>$this->master_process_id,
+            "pid"=>$pid,
+            "cur_menory"=>$this->convert(memory_get_usage(true)),
+            "cur_status"=>$this->cur_status,
+            "child_begin_time"=>$this->child_begin_time,
+            "cur_task_begin_time"=>$this->cur_task_begin_time,
+            "cur_run_level"=>$this->cur_run_level,
+            "cur_task_run_times"=>$this->cur_task_run_times,
+            "cur_task_success_run_times"=>$this->cur_task_success_run_times,
+            "task_content"=>$this->task_content,
+        );
+        $this->redis->hSet($this->redis_task_list_name."_chind_info".$this->master_process_id,"process_".$pid,serialize($data) );
+    }
+
+
     /**
      * 子进程
      */
     private function child($run_level="")
     {
-
         $id = getmypid();
+        $this->master_process_id=$this->getMasterProcessId();
+        $this->child_begin_time=time();//子进程开始时间
+        $this->cur_run_level=$run_level;//当前任务运行等级
         $this->printInfo( "[".date("Y-m-d H:i:s")."]创建子进程：".($run_level?"level[".$run_level."]":"")."[" . $id . "]>>>\n");
         for (;;) {
+            $this->cur_task_begin_time=time();//当前任务开始时间
             $info="";
             $list=array();
             $task_doing_key="";
             $redis_task_name_doing_key="";
-
+            list($msec, $sec) = explode(' ', microtime());
+            $begin_time=round($msec,3) + $sec;
             try {
+                $this->cur_status=0;
+                $this->task_content=null;
+                $this->saveChindInfo();
                 if(self::$kill_sig==1){
                     $this->printInfo( "[".date("Y-m-d H:i:s")."]结束子进程".($run_level?"level[".$run_level."]":"")."[".$id."]\n");exit(0);
+                    $this->redisConnect();
+                    $this->redis->hDel($this->redis_task_list_name."_chind_info".$this->master_process_id,"process_".$id);
                 }
                 $list = $this->TaskPop($run_level);
                 if (count($list) <= 0) {
                     continue;
                 }
-                list($msec, $sec) = explode(' ', microtime());
-                $begin_time=round($msec,3) + $sec;
+                $this->cur_status=1;
+                $this->task_content=$list[1];
+                $this->saveChindInfo();
+                $this->cur_task_run_times++;
+
                 //进行中的任务
                 $task_doing_key=md5(rand(1000,9999).$list[1]);
                 $redis_task_name_doing_key=$this->redis_task_list_name."_doing";
@@ -471,6 +697,7 @@ class Ydtask
                 if(!$info){
                     throw new \Exception("任务调用失败返回值[".var_export($info,true)."]");
                 }
+                $this->cur_task_success_run_times++;
                 $this->redis->hDel($redis_task_name_doing_key,$task_doing_key);
 
             } catch (\PDOException $e) {
@@ -531,6 +758,7 @@ class Ydtask
                 throw new \RedisException("ping服务器redis失败".$this->redis_host.":".$this->redis_port,231301);
             }
         } catch (\RedisException $e) {
+            $this->redis->close();
             $this->redisConnect();
         }
         $redis_task_list_name=$this->redis_task_list_name;
@@ -552,8 +780,16 @@ class Ydtask
     {
         $connetct_redis=@$this->redis->connect($this->redis_host, $this->redis_port,10);//10秒超时
         if(!$connetct_redis){
+            $this->redis->close();
             throw new \RedisException("连接redis失败[".$this->redis_host.":".$this->redis_port."]",231302);
         }
 
+    }
+
+    public function __destruct()
+    {
+        if($this->cur_run_level>0 && $this->redis){
+            @$this->redis->close();
+        }
     }
 }

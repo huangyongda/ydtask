@@ -343,6 +343,48 @@ class Ydtask
 
         return $str;
     }
+
+    private function show_status()
+    {
+        echo `clear`;
+        //信号处理函数
+        while(1){
+            $cols=exec("tput cols");
+            $lines=exec("tput lines");
+            echo "\e[0;0H";//重置光标位置
+
+
+            $this->status();
+
+            for ($i=0;$i<=$lines;$i++){
+                echo "\e[".$lines.";0H\033[K";
+            }
+
+            sleep(1);
+        }
+        exit();
+    }
+
+    /**
+     * 获取中文数量
+     * @param $str
+     * @return int
+     */
+    private function getCnNum($str){
+        $encode = 'UTF-8';
+        $str_num = mb_strlen($str, $encode);
+
+        $j = 0;
+
+        for($i=0; $i < $str_num; $i++)
+        {
+            if(ord(mb_substr($str, $i, 1, $encode))> 0xa0)
+            {
+                $j++;
+            }
+        }
+        return $j;
+    }
     private function status()
     {
         $head=array(
@@ -418,11 +460,30 @@ class Ydtask
             $formatStatusInfo=$this->formatStatusInfo;
             $print_info=$formatStatusInfo($print_info);
         }
-        foreach ($print_info as $item) {
-            echo implode(" ",$item)."\n";
-        }
 
-        exit(0);
+        $maxLenghtList=array();
+        foreach ($print_info as $key=>$item) {
+            foreach ($item as $key2=>$item2) {
+                $max_lenght=strlen($item2);
+                $max_lenght-=$this->getCnNum($item2);
+                if(!isset($maxLenghtList[$key2])){
+                    $maxLenghtList[$key2]=0;
+                }
+                if($max_lenght>$maxLenghtList[$key2]){
+                    $maxLenghtList[$key2]=$max_lenght;
+                }
+            }
+
+        }
+        foreach ($print_info as $item) {
+            foreach ($item as $key2=>$val) {
+                echo str_pad($val, $maxLenghtList[$key2]+$this->getCnNum($val)," ");
+//                $mask = "%".$maxLenghtList[$key2]."s ";
+//                printf("%-20.20s ", $val);
+//                printf("%-20".$maxLenghtList[$key2]."s ", $val);
+            }
+            echo "\n";
+        }
     }
 
     private function runCommand()
@@ -433,7 +494,7 @@ class Ydtask
                 exit(0);
                 break;
             case "status":
-                $this->status();
+                $this->show_status();
                 exit(0);
                 break;
             case "":

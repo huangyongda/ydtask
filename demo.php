@@ -42,8 +42,8 @@ $obj=new Ydtask();
     })//输出
     ->setRedisTasklistName(array("tasklist"))//出队的list队列名称
     ->setRedisTasklistName("tasklist")//出队的list队列名称
-    ->setPidPath("ydtask.pid")//出队的list队列名称
-    ->setRestartCheckFilePath(dirname(__FILE__) )//服务自动重启 检测路径（自动检测最新修改时间 最新的php文件）
+    ->setPidPath("ydtask.pid")//pid 保存的路径
+    ->setRestartCheckFilePath(array(dirname(__FILE__) ) )//服务自动重启 检测路径（自动检测最新修改时间 最新的php文件）
     ->setRunConfig(1,2) //设置运行配置 表示等级1的配置运行进程数量为2 优先级大于setTaskNum方法
     ->setRunConfig(2,2) //设置运行配置 表示等级1的配置运行进程数量为2 优先级大于setTaskNum方法
     ->setRunConfig(3,2) //设置运行配置 表示等级1的配置运行进程数量为2 优先级大于setTaskNum方法

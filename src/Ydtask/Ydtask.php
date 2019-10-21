@@ -165,7 +165,7 @@ class Ydtask
     public static function sighandler($signo)
     {
         self::$kill_sig=1;
-//        echo ( "进程:".getmypid().",收到结束信号:".$signo."\n" );
+        echo ( "进程:".getmypid().",收到结束信号:".$signo."\n" );
     }
 
     /**
@@ -348,6 +348,8 @@ class Ydtask
     {
         echo `clear`;
         //信号处理函数
+//        echo "\33[?25h";//显示光标
+        echo "\33[?25l";//隐藏光标
         while(1){
             $cols=exec("tput cols");
             $lines=exec("tput lines");
@@ -359,7 +361,7 @@ class Ydtask
             for ($i=0;$i<=$lines;$i++){
                 echo "\e[".$lines.";0H\033[K";
             }
-
+            echo "\e[".$cols.";".$lines."H";//重置光标位置
             sleep(1);
         }
         exit();
@@ -608,6 +610,15 @@ class Ydtask
     private function getFileNewTime($dir)
     {
         $last_update_time=0;
+        if(is_array($dir)){
+            foreach ($dir as $val) {
+                $curLastTime=$this->getFileNewTime();
+                if($curLastTime>$last_update_time){
+                    $last_update_time=$curLastTime;
+                }
+            }
+            return $last_update_time;
+        }
         if(is_dir($dir))
         {
             if ($dh = opendir($dir))

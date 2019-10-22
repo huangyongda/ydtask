@@ -29,6 +29,7 @@ class Ydtask
     private $cur_task_success_run_times=0;//当前进程执行任务成功次数
     private $task_content=0;//当前任务执行内容
     private $formatStatusInfo=0;//当前任务执行内容
+    private $cur_task_run_success=0;//当前任务执行是否成功
 
     public function __construct()
     {
@@ -206,6 +207,7 @@ class Ydtask
                     "cur_task_run_times"=>$this->cur_task_run_times,
                     "cur_task_success_run_times"=>$this->cur_task_success_run_times,
                     "task_content"=>$this->task_content,
+                    "cur_task_run_success"=>$this->cur_task_run_success,
                 );
                 $printInfoPath=$func($data);
                 foreach ($printInfoPath as $Path) {
@@ -612,7 +614,7 @@ class Ydtask
         $last_update_time=0;
         if(is_array($dir)){
             foreach ($dir as $val) {
-                $curLastTime=$this->getFileNewTime();
+                $curLastTime=$this->getFileNewTime($val);
                 if($curLastTime>$last_update_time){
                     $last_update_time=$curLastTime;
                 }
@@ -741,6 +743,7 @@ class Ydtask
             $redis_task_name_doing_key="";
             list($msec, $sec) = explode(' ', microtime());
             $begin_time=round($msec,3) + $sec;
+            $this->cur_task_run_success=0;
             try {
                 $this->cur_status=0;
                 $this->task_content=null;
@@ -754,6 +757,8 @@ class Ydtask
                 if (count($list) <= 0) {
                     continue;
                 }
+                list($msec, $sec) = explode(' ', microtime());
+                $begin_time=round($msec,3) + $sec;
                 $this->cur_status=1;
                 $this->task_content=$list[1];
                 $this->saveChindInfo();
@@ -769,6 +774,7 @@ class Ydtask
                 if(!$info){
                     throw new \Exception("任务调用失败返回值[".var_export($info,true)."]");
                 }
+                $this->cur_task_run_success=1;
                 $this->cur_task_success_run_times++;
                 $this->redis->hDel($redis_task_name_doing_key,$task_doing_key);
 

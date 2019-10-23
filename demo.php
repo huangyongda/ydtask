@@ -1,12 +1,5 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: huangyongda
- * Date: 2017/7/28
- * Time: 16:42
- */
-namespace Ydtask;
-include "src/Ydtask/Ydtask.php";
+include "vendor/autoload.php";
 
 
 include_once "test.php";
@@ -17,10 +10,10 @@ switch ($command) {
     default :
         break;
 }
-$obj=new Ydtask();
+$obj=new \Ydtask\Ydtask();
 
     $obj->callFunction(function ($data) {
-        $newobj = new test();
+        $newobj = new \Ydtask\test();
         return $newobj->test1($data);
     })
     ->isDaemonize(false)//是否守护进程模式
@@ -31,7 +24,7 @@ $obj=new Ydtask();
     ->setFormatStatusInfo(function ($data){ //可以自己自定义任务状态显示内容
         foreach ($data as $key=>$list) {
             foreach ($list as $name=>$item) {
-                $data[$key][$name]="|".$data[$key][$name];
+                $data[$key][$name]=$data[$key][$name];
             }
         }
         return $data;

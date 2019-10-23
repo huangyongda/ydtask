@@ -166,7 +166,7 @@ class Ydtask
     public static function sighandler($signo)
     {
         self::$kill_sig=1;
-        echo ( "进程:".getmypid().",收到结束信号:".$signo."\n" );
+//        echo ( "进程:".getmypid().",收到结束信号:".$signo."\n" );
     }
 
     /**
@@ -346,25 +346,38 @@ class Ydtask
         return $str;
     }
 
+    private $cur_select_item=0;
+    private $cur_choose=0;
+    private $cur_choose_cmd="";
+
+
+
+    function status_sig_handler($signo)
+    {
+        echo "\33[?25h";   //显示光标
+        echo "\e[0;0H";//重置光标位置
+        echo `clear`;
+        exit(0);
+
+    }
     private function show_status()
     {
+
+        declare(ticks = 1);
+
+        pcntl_signal(SIGINT, array(__CLASS__,"status_sig_handler"));
+
         echo `clear`;
         //信号处理函数
 //        echo "\33[?25h";//显示光标
         echo "\33[?25l";//隐藏光标
+        system("stty -icanon");
         while(1){
-            $cols=exec("tput cols");
-            $lines=exec("tput lines");
+
             echo "\e[0;0H";//重置光标位置
-
-
             $this->status();
 
-            for ($i=0;$i<=$lines;$i++){
-                echo "\e[".$lines.";0H\033[K";
-            }
-            echo "\e[".$cols.";".$lines."H";//重置光标位置
-            sleep(1);
+            usleep(50000);
         }
         exit();
     }
@@ -465,6 +478,16 @@ class Ydtask
             $print_info=$formatStatusInfo($print_info);
         }
 
+        $kill_id=0;
+        if(isset($print_info[$this->cur_select_item]) && isset($print_info[$this->cur_select_item][1])){
+            $kill_id=$print_info[$this->cur_select_item][1];
+        }
+
+        foreach ($print_info as $key=>$item) {
+            foreach ($item as $key2=>$item2) {
+                $print_info[$key][$key2]="|".$print_info[$key][$key2];
+            }
+        }
         $maxLenghtList=array();
         foreach ($print_info as $key=>$item) {
             foreach ($item as $key2=>$item2) {
@@ -479,15 +502,89 @@ class Ydtask
             }
 
         }
-        foreach ($print_info as $item) {
+        if($this->cur_select_item >count($print_info) ){
+            $this->cur_select_item=count($print_info);
+        }
+        if($this->cur_select_item<=0){
+            $this->cur_select_item=1;
+        }
+
+
+        foreach ($print_info as $key=>$item) {
+            if($key==0){
+                echo "\033[40;35m";
+            }elseif ($this->cur_select_item==$key){
+                echo "\033[44;32m";
+            }
+            else{
+                echo "\033[40;32m";
+            }
             foreach ($item as $key2=>$val) {
                 echo str_pad($val, $maxLenghtList[$key2]+$this->getCnNum($val)," ");
-//                $mask = "%".$maxLenghtList[$key2]."s ";
-//                printf("%-20.20s ", $val);
-//                printf("%-20".$maxLenghtList[$key2]."s ", $val);
             }
-            echo "\n";
+            echo "\e[0m\033[K\n";
         }
+
+        $lines=exec("tput lines");
+        for ($i=count($print_info)+1;$i<$lines;$i++){
+            echo "\e[".$i.";0H\033[K";
+        }
+
+        $stdin = fopen('php://stdin', 'r');
+        stream_set_blocking($stdin, false);
+
+        if($c = fread($stdin,3)){//
+        // echo "Read from STDIN: " . $c . ",ascii:".ord($c)."--------------------------bin2hex:".bin2hex($c)."--------------------------\n";
+            if(bin2hex($c)==="1b5b41"){
+                //                    echo "\t你按了往上按钮";
+                $this->cur_select_item--;
+            }
+            if(bin2hex($c)==="1b5b42"){
+                //                    echo "\t你按了往下按钮";
+                $this->cur_select_item++;
+            }
+            if(bin2hex($c)==="0a"){
+                //                    echo "\t你按了确定按钮";
+                $this->cur_choose=$this->cur_select_item;
+            }
+            if($this->cur_choose && trim($c)==="k"){
+                $this->cur_choose_cmd="kill";
+            }
+            if($this->cur_choose && trim($c)==="s"){
+                $this->cur_choose_cmd="stop";
+            }
+            if($this->cur_choose && trim($c)==="q" || $this->cur_choose && trim($c)==="n"){
+                $this->cur_choose_cmd="";
+                $this->cur_choose=0;
+            }
+            if($this->cur_choose_cmd && trim($c)==="y"){
+                switch ($this->cur_choose_cmd){
+                    case "kill":
+                        $shell_str="kill -9 ".$kill_id;
+                        exec($shell_str,$out);
+                        break;
+                    case "stop":
+                        $shell_str="kill -2 ".$kill_id;
+                        exec($shell_str,$out);
+                        break;
+                }
+                $this->cur_select_item=0;
+                $this->cur_choose_cmd="";
+                $this->cur_choose=0;
+            }
+        }
+        if($this->cur_choose_cmd){
+            echo "\n是否确认操作 进程".$kill_id.",操作".$this->cur_choose_cmd.",[y]确认,[n]取消\e[K";
+        }elseif($this->cur_choose){
+            echo "\n当前选择".$this->cur_select_item.",输入[k]强制结束当前子进程,[s]当前子进程停止,[q]返回\e[K";
+        }else{
+            if($this->cur_choose_cmd && $kill_id>0){
+                echo "\n当前已经结束进程".$kill_id."*******\e[K";
+            }else{
+                echo "\n当前选择".$this->cur_select_item."*******\e[K";
+            }
+        }
+
     }
 
     private function runCommand()

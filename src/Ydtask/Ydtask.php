@@ -635,6 +635,17 @@ class Ydtask
         if($this->restartCheckFilePath){
             $last_update_time=$this->getFileNewTime($this->restartCheckFilePath);
         }
+
+        $this->redisConnect();
+        $redis_task_name_doing_key=$this->redis_task_list_name."_doing";
+        if($this->redis->exists($redis_task_name_doing_key) ){
+            $this->redis->del($redis_task_name_doing_key);
+
+        }
+        while ($chind_list=$this->redis->getKeys($this->redis_task_list_name."_chind_info*")){
+            $this->redis->del($chind_list[0]);
+        }
+
         $restart=false;
         $this->run_task($this->run_num);
         for (;;){
@@ -659,7 +670,7 @@ class Ydtask
             //echo "self::kill_sig".self::$kill_sig.">>".count($this->myids)."\n";
             if(self::$kill_sig==1 && count($this->myids)==0){
                 $this->printInfo(  "[".date("Y-m-d H:i:s")."]主进程结束..\n");
-                $this->redisConnect();
+
                 $this->redis->hDel($this->redis_task_list_name."_chind_info".$this->getMasterProcessId());
                 unlink ($this->pidPath);//删除pid的文件
                 exit(0);
@@ -780,6 +791,8 @@ class Ydtask
                 //pcntl_wait($status,WNOHANG); //等待子进程中断，防止子进程成为僵尸进程。
                 //echo "父进程结束".$status;
             } else {
+                $this->redis= new \Redis();
+                $this->redisConnect();
                 //子进程得到的$pid为0, 所以这里是子进程执行的逻辑。
                 //sleep(1);
                 $this->child($run_level);
@@ -914,9 +927,9 @@ class Ydtask
 
     private function exec_error($list,$redis_task_name_doing_key,$task_doing_key)
     {
-        if(count($list)>0 ){
-            $this->redis->lPush($list[0]."_error", $list[1]);
-        }
+//        if(count($list)>0 ){
+//            $this->redis->lPush($list[0]."_error", $list[1]);
+//        }
         if($redis_task_name_doing_key && $task_doing_key){
             $this->redis->hDel($redis_task_name_doing_key,$task_doing_key);
         }

@@ -21,11 +21,11 @@ $info="";
         }
 
         for ($i=0;$i<=$total;$i++){
-        $list = @$redis->lPush($RedisTasklistName, "队列信息".date("Y-m-d H:i:s" ));
+//        $list = @$redis->lPush($RedisTasklistName, "队列信息".date("Y-m-d H:i:s" ));
         $list = @$redis->lPush("tasklist1", "队列信息".date("Y-m-d H:i:s" ));
-        echo var_export($connetct_redis,true);
-        echo var_export($list,true);
-            sleep(1);
+//        echo var_export($connetct_redis,true);
+//        echo var_export($list,true);
+//            sleep(1);
         }
         $info="";
     } catch (\RedisException $e) {
